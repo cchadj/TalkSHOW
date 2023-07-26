@@ -79,7 +79,7 @@ for speaker_name in speakers:
     speaker_root = os.path.join(data_root, speaker_name)
 
     video_dir_extensions = {".mp4", ".mkv", ".webm"}
-    videos = [v for v in os.listdir(speaker_root) if os.path.isdir(v) and Path(v).suffix in video_dir_extensions]
+    videos = [v for v in os.listdir(speaker_root) if Path(v).suffix in video_dir_extensions]
     print(videos)
 
     haode = huaide = 0
@@ -158,7 +158,7 @@ for speaker_name in speakers:
     speaker_root = os.path.join(data_root, speaker_name)
 
     video_dir_extensions = {".mp4", ".mkv", ".webm"}
-    videos = [v for v in os.listdir(speaker_root) if os.path.isdir(v) and Path(v).suffix in video_dir_extensions]
+    videos = [v for v in os.listdir(speaker_root) if Path(v).suffix in video_dir_extensions]
     print(videos)
 
     haode = huaide = 0

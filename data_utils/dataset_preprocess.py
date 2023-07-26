@@ -7,6 +7,7 @@ import torch
 import numpy as np
 import librosa
 import random
+from pathlib import Path
 
 speakers = ['seth', 'conan', 'oliver', 'chemistry']
 data_root = "./data/ExpressiveWholeBodyDatasetv1.0/"
@@ -77,7 +78,8 @@ class CPU_Unpickler(pickle.Unpickler):
 for speaker_name in speakers:
     speaker_root = os.path.join(data_root, speaker_name)
 
-    videos = [v for v in os.listdir(speaker_root)]
+    video_dir_extensions = {".mp4", ".mkv", ".webm"}
+    videos = [v for v in os.listdir(speaker_root) if os.path.isdir(v) and Path(v).suffix in video_dir_extensions]
     print(videos)
 
     haode = huaide = 0
@@ -155,7 +157,8 @@ for speaker_name in speakers:
 for speaker_name in speakers:
     speaker_root = os.path.join(data_root, speaker_name)
 
-    videos = [v for v in os.listdir(speaker_root)]
+    video_dir_extensions = {".mp4", ".mkv", ".webm"}
+    videos = [v for v in os.listdir(speaker_root) if os.path.isdir(v) and Path(v).suffix in video_dir_extensions]
     print(videos)
 
     haode = huaide = 0

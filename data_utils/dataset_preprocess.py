@@ -10,7 +10,7 @@ import random
 from pathlib import Path
 
 speakers = ['seth', 'conan', 'oliver', 'chemistry']
-data_root = "./data/ExpressiveWholeBodyDatasetv1.0/"
+data_root = "./data/ExpressiveWholeBodyDatasetV1.0/"
 split = 'train'
 
 
@@ -114,7 +114,7 @@ for speaker_name in speakers:
             # delete the data without audio or the audio file could not be read
             if os.path.isfile(audio_fname):
                 try:
-                    audio = librosa.load(audio_fname)
+                    audio = librosa.load(audio_fname, sr=None)
                 except:
                     # print(key)
                     shutil.rmtree(key)

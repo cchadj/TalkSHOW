@@ -28,6 +28,11 @@ def init_model(model_name, args, config):
             args,
             config,
         )
+    elif model_name == "gestformer_encoder":
+        generator = gestformer_encoder(
+            args,
+            config,
+        )
     else:
         raise ValueError
     return generator

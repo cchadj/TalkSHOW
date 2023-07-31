@@ -192,7 +192,8 @@ class Trainer():
                 aud_feat_win_size=self.config.Data.aud.aud_feat_win_size,
                 aud_feat_dim=self.config.Data.aud.aud_feat_dim,
                 feat_method=self.config.Data.aud.feat_method,
-                context_info=self.config.Data.aud.context_info
+                context_info=self.config.Data.aud.context_info,
+                config=self.config
             )
 
             if self.config.Data.pose.normalization:

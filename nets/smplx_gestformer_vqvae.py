@@ -1,3 +1,5 @@
+import utils.optim
+from utils.optim import ScheduledOptim
 from vqgan.vqmodules.gan_models import setup_vq_transformer, calc_vq_loss_gestformer, VQModelTransformer
 
 from nets.layers import *
@@ -9,7 +11,14 @@ class TrainWrapper(TrainWrapperBaseClass):
     '''
     a wrapper receving a batch from data_utils and calculate loss
     '''
+    body_generator: VQModelTransformer
+    body_optimizer: ScheduledOptim
+
+    hand_generator: VQModelTransformer
+    hand_optimizer: ScheduledOptim
+
     generator: VQModelTransformer
+    optimizer: ScheduledOptim
 
     def __init__(self, args, config):
         self.args = args
@@ -28,9 +37,23 @@ class TrainWrapper(TrainWrapperBaseClass):
         self.audio = False
         self.discriminator = None
 
-        generator, g_optimizer, start_epoch = setup_vq_transformer(args, config.as_dict(), device=self.device)
-        self.generator = generator
-        self.generator_optimizer = g_optimizer
+        if self.composition:
+            b_config = config.as_dict()
+            b_config["transformer_config"]["in_dim"] = 39
+
+            b_generator, b_optimizer, _ = setup_vq_transformer(args, b_config, device=self.device)
+            self.body_generator = b_generator
+            self.body_optimizer = b_optimizer
+
+            h_config = config.as_dict()
+            h_config["transformer_config"]["in_dim"] = 90
+            h_generator, h_optimizer, _ = setup_vq_transformer(args, h_config, device=self.device)
+            self.hand_generator = h_generator
+            self.hand_optimizer = h_optimizer
+        else:
+            generator, optimizer, _ = setup_vq_transformer(args, config.as_dict(), device=self.device)
+            self.generator = generator
+            self.optimizer = optimizer
 
         if self.convert_to_6d:
             self.c_index = c_index_6d
@@ -40,6 +63,39 @@ class TrainWrapper(TrainWrapperBaseClass):
         # if torch.cuda.device_count() > 1:
             # self.generator = torch.nn.DataParallel(self.generator, device_ids=[0, 1])
         super().__init__(args, config)
+
+    def __call__(self, bat: dict):
+        self.global_step += 1
+
+        poses = bat['poses'].to(self.device).to(torch.float32)
+        poses = poses[:, self.c_index, :]
+        gt_poses = poses.permute(0, 2, 1)
+
+        loss = 0
+        loss_dict = {}
+        if self.composition:
+            b_poses = gt_poses[..., :self.each_dim[1]]
+            h_poses = gt_poses[..., self.each_dim[1]:]
+            loss_dict, loss = self.vq_train(b_poses[:, :], self.body_optimizer, self.body_generator, loss_dict, loss, "b")
+            loss_dict, loss = self.vq_train(h_poses[:, :], self.hand_optimizer, self.hand_generator, loss_dict, loss, "h")
+        else:
+            loss_dict, loss = self.vq_train(gt_poses[:, :], self.optimizer, self.generator, loss_dict, loss, "g")
+
+        total_loss = None
+        return total_loss, loss_dict
+
+    def vq_train(self, gt, optimizer: utils.optim.ScheduledOptim, model: VQModelTransformer, dict, total_loss, name: str, pre=None):
+        # e_q_loss, x_recon = model(gt)
+        x_recon, e_q_loss = model(gt)
+        loss, loss_dict = self.get_loss(pred_poses=x_recon, gt_poses=gt, e_q_loss=e_q_loss, pre=pre)
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step_and_update_lr()
+
+        for key in list(loss_dict.keys()):
+            dict[name + key] = loss_dict.get(key, 0).item()
+        return dict, total_loss
 
     def init_optimizer(self):
         # already setup by setup_vq_transform
@@ -116,35 +172,6 @@ class TrainWrapper(TrainWrapperBaseClass):
         self.full_dim = jaw_dim + eye_dim + body_dim + hand_dim
         self.pose = int(self.full_dim / round(3 * scale))
         self.each_dim = [jaw_dim, eye_dim + body_dim, hand_dim, face_dim]
-
-    def __call__(self, bat: dict):
-        self.global_step += 1
-
-        poses = bat['poses'].to(self.device).to(torch.float32)
-        poses = poses[:, self.c_index, :]
-        gt_poses = poses.permute(0, 2, 1)
-        b_poses = gt_poses[..., :self.each_dim[1]]
-
-        loss = 0
-        loss_dict = {}
-        loss_dict, loss = self.vq_train(b_poses[:, :], 'b', self.generator, loss_dict, loss)
-
-        total_loss = None
-        return total_loss, loss_dict
-
-    def vq_train(self, gt, name, model, dict, total_loss, pre=None):
-        # e_q_loss, x_recon = model(gt)
-        x_recon, e_q_loss = model(gt)
-        loss, loss_dict = self.get_loss(pred_poses=x_recon, gt_poses=gt, e_q_loss=e_q_loss, pre=pre)
-
-        optimizer = self.generator_optimizer
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step_and_update_lr()
-
-        for key in list(loss_dict.keys()):
-            dict[name + key] = loss_dict.get(key, 0).item()
-        return dict, total_loss
 
     def get_loss(self,
                  pred_poses,

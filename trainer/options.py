@@ -1,7 +1,9 @@
+from typing import Optional
 from argparse import ArgumentParser
 
-def parse_args():
-    parser = ArgumentParser()
+
+def parse_args(parser: Optional[ArgumentParser] = None):
+    parser = parser or ArgumentParser()
     parser.add_argument('--device', default="cpu:0", type=str)
     parser.add_argument('--save_dir', default='experiments', type=str)
     parser.add_argument('--exp_name', default='smplx_S2G', type=str)

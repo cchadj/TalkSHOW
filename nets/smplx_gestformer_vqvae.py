@@ -1,27 +1,8 @@
-import os
-import sys
-
 from vqgan.vqmodules.gan_models import setup_vq_transformer, calc_vq_loss_gestformer, VQModelTransformer
-
-import torch
-from torch.optim.lr_scheduler import StepLR
-
-sys.path.append(os.getcwd())
 
 from nets.layers import *
 from nets.base import TrainWrapperBaseClass
-from nets.spg.gated_pixelcnn_v2 import GatedPixelCNN as pixelcnn
-from nets.spg.vqvae_1d import VQVAE as s2g_body, Wav2VecEncoder
-from nets.spg.vqvae_1d import AudioEncoder
-from nets.utils import parse_audio, denormalize
-from data_utils import get_mfcc, get_melspec, get_mfcc_old, get_mfcc_psf, get_mfcc_psf_min, get_mfcc_ta
-import numpy as np
-import torch.optim as optim
-import torch.nn.functional as F
-from sklearn.preprocessing import normalize
-
 from data_utils.lower_body import c_index, c_index_3d, c_index_6d
-from data_utils.utils import smooth_geom, get_mfcc_sepa
 
 
 class TrainWrapper(TrainWrapperBaseClass):
@@ -46,15 +27,6 @@ class TrainWrapper(TrainWrapperBaseClass):
 
         self.audio = False
         self.discriminator = None
-
-        # if self.audio:
-        #     self.audioencoder = AudioEncoder(in_dim=64, num_hiddens=256, num_residual_layers=2, num_residual_hiddens=256).to(self.device)
-        # else:
-        #     self.audioencoder = None
-        # if self.convert_to_6d:
-        #     dim, layer = 512, 10
-        # else:
-        #     dim, layer = 256, 15
 
         generator, g_optimizer, start_epoch = setup_vq_transformer(args, config.as_dict(), device=self.device)
         self.generator = generator
@@ -145,26 +117,19 @@ class TrainWrapper(TrainWrapperBaseClass):
         self.pose = int(self.full_dim / round(3 * scale))
         self.each_dim = [jaw_dim, eye_dim + body_dim, hand_dim, face_dim]
 
-
     def __call__(self, bat: dict):
         self.global_step += 1
 
-        total_loss = None
-        loss_dict = {}
-
-        aud, poses = bat['aud_feat'].to(self.device).to(torch.float32), bat['poses'].to(self.device).to(torch.float32)
-
-        # id = bat['speaker'].to(self.device) - 20
-        # id = F.one_hot(id, self.num_classes)
-
+        poses = bat['poses'].to(self.device).to(torch.float32)
         poses = poses[:, self.c_index, :]
         gt_poses = poses.permute(0, 2, 1)
         b_poses = gt_poses[..., :self.each_dim[1]]
-        h_poses = gt_poses[..., self.each_dim[1]:]
 
         loss = 0
+        loss_dict = {}
         loss_dict, loss = self.vq_train(b_poses[:, :], 'b', self.generator, loss_dict, loss)
 
+        total_loss = None
         return total_loss, loss_dict
 
     def vq_train(self, gt, name, model, dict, total_loss, pre=None):

@@ -200,8 +200,9 @@ def test(test_loader, generator, FGD_handler, smplx_model, config):
 def main():
     parser = parse_args()
     args = parser.parse_args()
-    device = torch.device(args.gpu)
-    torch.cuda.set_device(device)
+    device = torch.device(args.device)
+    if device.type == "cuda":
+        torch.cuda.set_device(device)
 
     config = load_JsonConfig(args.config_file)
 

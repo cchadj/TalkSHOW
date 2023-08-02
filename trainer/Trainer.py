@@ -2,6 +2,7 @@ import os
 import sys
 
 import wandb
+from wandb.wandb_run import Run as WandbRun
 
 sys.path.append(os.getcwd())
 
@@ -222,7 +223,7 @@ class Trainer():
         info_str += ['%s:%.4f'%(key, loss_dict[key]/steps) for key in list(loss_dict.keys())]
         logging.info(','.join(info_str))
     
-    def save_model(self, epoch):
+    def save_model(self, epoch, wandb_run: Optional[WandbRun] = None):
         # if 'vq' in self.config.Model.model_name:
         #     state_dict = {
         #         'g_body': self.g_body.state_dict(),
@@ -238,6 +239,8 @@ class Trainer():
         }
         save_name = os.path.join(self.train_dir, 'ckpt-%d.pth'%(epoch))
         torch.save(state_dict, save_name)
+        if wandb_run:
+            wandb_run.save(save_name)
 
     def train_epoch(self, epoch, on_step_end: Optional[OnStepEndCallable] = None) -> LossDict:
         epoch_loss_dict = {} #最好是追踪每个epoch的loss变换
@@ -311,4 +314,4 @@ class Trainer():
             # self.generator.scheduler.step()
             # logging.info('learning rate:%d' % (self.generator.scheduler.get_lr()[0]))
             if (epoch+1)%self.config.Log.save_every == 0 or (epoch+1) == 30:
-                self.save_model(epoch)
+                self.save_model(epoch, wandb_run)

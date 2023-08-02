@@ -1,6 +1,8 @@
 import os
 import sys
 
+import wandb
+
 sys.path.append(os.getcwd())
 
 from data_utils import torch_data
@@ -18,14 +20,19 @@ import logging
 import time
 import shutil
 
+from typing import Callable, Dict, Optional
+
 def prn_obj(obj):
     print('\n'.join(['%s:%s' % item for item in obj.__dict__.items()]))
 
 
-
+LossDict = Dict[str, float]
+OnStepEndCallable = Callable[[int, LossDict], None]
 
 
 class Trainer():
+    use_wandb: bool
+
     def __init__(self) -> None:
         parser = parse_args()
         self.args = parser.parse_args()
@@ -35,6 +42,7 @@ class Trainer():
         os.environ['extra_joint_path']=self.config.extra_joint_path
         os.environ['j14_regressor_path']=self.config.j14_regressor_path
 
+        self.use_wandb = self.args.use_wandb
         # torch.set_default_dtype(torch.float64)
         # wandb_run = wandb.init(project=f's2g_sweep')
 
@@ -231,7 +239,7 @@ class Trainer():
         save_name = os.path.join(self.train_dir, 'ckpt-%d.pth'%(epoch))
         torch.save(state_dict, save_name)
 
-    def train_epoch(self, epoch):
+    def train_epoch(self, epoch, on_step_end: Optional[OnStepEndCallable] = None) -> LossDict:
         epoch_loss_dict = {} #最好是追踪每个epoch的loss变换
         epoch_steps = 0
         if 'freeMo' in self.config.Model.model_name:
@@ -249,6 +257,8 @@ class Trainer():
 
                 if self.global_steps % self.config.Log.print_every == 0:
                     self.print_func(epoch_loss_dict, epoch_steps)
+                if on_step_end:
+                    on_step_end(self.global_steps, loss_dict)
         else:
             # self.config.Model.model_name==smplx_S2G
             for bat in self.train_loader:
@@ -268,12 +278,33 @@ class Trainer():
                 if self.global_steps % self.config.Log.print_every == 0:
                     self.print_func(epoch_loss_dict, epoch_steps)
 
+                if on_step_end:
+                    on_step_end(self.global_steps, loss_dict, epoch_loss_dict)
+            return epoch_loss_dict
+
     def train(self):
         logging.info('start_training')
+        wandb_run = wandb.init(
+            project="gfts",
+            config=self.config,
+        ) if self.use_wandb else None
+
+        def on_step_end(global_steps: int, step_losses: LossDict) -> None:
+            if wandb_run is None:
+                return
+
+            wandb_run.log({
+                "step": step_losses,
+            }, step=global_steps)
+
         self.total_loss_dict = {}
         for epoch in range(self.start_epoch, self.config.Train.epochs):
             logging.info('epoch:%d'%(epoch))
-            self.train_epoch(epoch)
+            epoch_losses = self.train_epoch(epoch, on_step_end)
+            if wandb_run:
+                wandb_run.log({
+                    "epoch": epoch_losses
+                }, step=self.global_steps)
             # self.generator.scheduler.step()
             # logging.info('learning rate:%d' % (self.generator.scheduler.get_lr()[0]))
             if (epoch+1)%self.config.Log.save_every == 0 or (epoch+1) == 30:

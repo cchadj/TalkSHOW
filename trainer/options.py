@@ -10,7 +10,8 @@ def parse_args(parser: Optional[ArgumentParser] = None):
     parser.add_argument('--speakers', nargs='+')
     parser.add_argument('--seed', default=1, type=int)
     parser.add_argument('--model_name', type=str)
-    
+    parser.add_argument('--use-wandb', action="store_true")
+
     #for Tmpt and S2G
     parser.add_argument('--use_template', action='store_true')
     parser.add_argument('--template_length', default=0, type=int)

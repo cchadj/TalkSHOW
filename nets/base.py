@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from typing import Union, List
 
 class TrainWrapperBaseClass():
     def __init__(self, args, config) -> None:
@@ -25,6 +26,10 @@ class TrainWrapperBaseClass():
 
     def get_loss(self, **kwargs):
         raise NotImplementedError
+
+    @property
+    def loss_dict_keys(self) -> List[str]:
+        return []
 
     def state_dict(self):
         model_state = {

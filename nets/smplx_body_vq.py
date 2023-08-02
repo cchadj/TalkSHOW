@@ -1,5 +1,6 @@
 import os
 import sys
+from typing import List, Union
 
 from torch.optim.lr_scheduler import StepLR
 
@@ -151,6 +152,12 @@ class TrainWrapper(TrainWrapperBaseClass):
             loss_dict, loss = self.vq_train(gt_poses[:, :], 'g', self.g, loss_dict, loss)
 
         return total_loss, loss_dict
+
+    @property
+    def loss_dict_keys(self) -> Union[List[str], None]:
+        loss_names = ["rec_loss", "velocity_loss", "f0_vel"]
+        generator_names = ["b", "h"] if self.composition else ["g"]
+        return [f"{gname}{loss_name}" for gname in generator_names for loss_name in loss_names]
 
     def vq_train(self, gt, name, model, dict, total_loss, pre=None):
         e_q_loss, x_recon = model(gt_poses=gt, pre_state=pre)

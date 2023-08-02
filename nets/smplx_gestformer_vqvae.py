@@ -7,6 +7,7 @@ from vqgan.vqmodules.gan_models import setup_vq_transformer, calc_vq_loss_gestfo
 from nets.layers import *
 from nets.base import TrainWrapperBaseClass
 from data_utils.lower_body import c_index, c_index_3d, c_index_6d
+from typing import List
 
 
 class TrainWrapper(TrainWrapperBaseClass):
@@ -166,6 +167,12 @@ class TrainWrapper(TrainWrapperBaseClass):
             loss_dict['f0_vel'] = f0_vel
 
         return gen_loss, loss_dict
+
+    @property
+    def loss_dict_keys(self) -> List[str]:
+        loss_names = ["rec_loss", "velocity_loss", "f0_vel"]
+        generator_names = ["b", "h"] if self.composition else ["g"]
+        return [f"{gname}{loss_name}" for gname in generator_names for loss_name in loss_names]
 
     def state_dict(self):
         if self.composition:

@@ -1,3 +1,5 @@
+from torch import Tensor
+
 import utils.optim
 from utils.optim import ScheduledOptim
 from vqgan.vqmodules.gan_models import setup_vq_transformer, calc_vq_loss_gestformer, VQModelTransformer
@@ -78,14 +80,14 @@ class TrainWrapper(TrainWrapperBaseClass):
             b_poses = gt_poses[..., :self.each_dim[1]]
             h_poses = gt_poses[..., self.each_dim[1]:]
             loss_dict, loss = self.vq_train(b_poses[:, :], self.g_body_optimizer, self.g_body, loss_dict, loss, "b")
-            loss_dict, loss = self.vq_train(h_poses[:, :], self.g_hand, self.g_hand, loss_dict, loss, "h")
+            loss_dict, loss = self.vq_train(h_poses[:, :], self.g_hand_optimizer, self.g_hand, loss_dict, loss, "h")
         else:
             loss_dict, loss = self.vq_train(gt_poses[:, :], self.g_optimizer, self.g, loss_dict, loss, "g")
 
         total_loss = None
         return total_loss, loss_dict
 
-    def vq_train(self, gt, optimizer: utils.optim.ScheduledOptim, model: VQModelTransformer, dict, total_loss, name: str, pre=None):
+    def vq_train(self, gt: Tensor, optimizer: utils.optim.ScheduledOptim, model: VQModelTransformer, accumulated_losses: dict, total_loss, name: str, pre=None):
         # e_q_loss, x_recon = model(gt)
         x_recon, e_q_loss = model(gt)
         loss, loss_dict = self.get_loss(pred_poses=x_recon, gt_poses=gt, e_q_loss=e_q_loss, pre=pre)
@@ -95,8 +97,8 @@ class TrainWrapper(TrainWrapperBaseClass):
         optimizer.step_and_update_lr()
 
         for key in list(loss_dict.keys()):
-            dict[name + key] = loss_dict.get(key, 0).item()
-        return dict, total_loss
+            accumulated_losses[name + key] = loss_dict.get(key, 0).item()
+        return accumulated_losses, total_loss
 
     def init_optimizer(self):
         # already setup by setup_vq_transform

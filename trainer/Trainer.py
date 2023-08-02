@@ -287,11 +287,17 @@ class Trainer():
 
     def train(self):
         logging.info('start_training')
-        wandb_run = wandb.init(
-            project="gfts",
-            config=self.config,
-            dir=os.getenv("WANDB_DIR", None),
-        ) if self.use_wandb else None
+        if self.use_wandb:
+            wandb_run = wandb.init(
+                project="gfts",
+                config=self.config,
+                dir=os.getenv("WANDB_DIR", None),
+            )
+            wandb_run.define_metric("epoch")
+            for loss_name in self.generator.loss_dict_keys:
+                wandb_run.define_metric(f"epoch_{loss_name}", goal="min", step_metric="epoch")
+        else:
+            wandb_run = None
 
         def on_step_end(global_step: int, step_losses: LossDict) -> None:
             if wandb_run is None:
@@ -308,9 +314,14 @@ class Trainer():
             logging.info('epoch:%d'%(epoch))
             epoch_losses = self.train_epoch(epoch, on_step_end)
             if wandb_run:
-                wandb_run.log({
-                    "epoch": epoch_losses
-                }, step=self.global_steps)
+                epoch_losses_log = {f"epoch_{loss_name}": loss for loss_name, loss in epoch_losses.items()}
+                wandb_run.log(
+                    {
+                        **epoch_losses_log,
+                        "epoch": epoch,
+                    },
+                    step=self.global_steps
+                )
             # self.generator.scheduler.step()
             # logging.info('learning rate:%d' % (self.generator.scheduler.get_lr()[0]))
             if (epoch+1)%self.config.Log.save_every == 0 or (epoch+1) == 30:

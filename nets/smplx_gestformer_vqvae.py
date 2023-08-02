@@ -11,14 +11,14 @@ class TrainWrapper(TrainWrapperBaseClass):
     '''
     a wrapper receving a batch from data_utils and calculate loss
     '''
-    body_generator: VQModelTransformer
-    body_optimizer: ScheduledOptim
+    g_body: VQModelTransformer
+    g_body_optimizer: ScheduledOptim
 
-    hand_generator: VQModelTransformer
-    hand_optimizer: ScheduledOptim
+    g_hand: VQModelTransformer
+    g_hand: ScheduledOptim
 
-    generator: VQModelTransformer
-    optimizer: ScheduledOptim
+    g: VQModelTransformer
+    g_optimizer: ScheduledOptim
 
     def __init__(self, args, config):
         self.args = args
@@ -36,24 +36,25 @@ class TrainWrapper(TrainWrapperBaseClass):
 
         self.audio = False
         self.discriminator = None
+        self.discriminator_optimizer = None
 
         if self.composition:
             b_config = config.as_dict()
             b_config["transformer_config"]["in_dim"] = 39
 
             b_generator, b_optimizer, _ = setup_vq_transformer(args, b_config, device=self.device)
-            self.body_generator = b_generator
-            self.body_optimizer = b_optimizer
+            self.g_body = b_generator
+            self.g_body_optimizer = b_optimizer
 
             h_config = config.as_dict()
             h_config["transformer_config"]["in_dim"] = 90
             h_generator, h_optimizer, _ = setup_vq_transformer(args, h_config, device=self.device)
-            self.hand_generator = h_generator
-            self.hand_optimizer = h_optimizer
+            self.g_hand = h_generator
+            self.g_hand_optimizer = h_optimizer
         else:
             generator, optimizer, _ = setup_vq_transformer(args, config.as_dict(), device=self.device)
-            self.generator = generator
-            self.optimizer = optimizer
+            self.g = generator
+            self.g_optimizer = optimizer
 
         if self.convert_to_6d:
             self.c_index = c_index_6d
@@ -76,10 +77,10 @@ class TrainWrapper(TrainWrapperBaseClass):
         if self.composition:
             b_poses = gt_poses[..., :self.each_dim[1]]
             h_poses = gt_poses[..., self.each_dim[1]:]
-            loss_dict, loss = self.vq_train(b_poses[:, :], self.body_optimizer, self.body_generator, loss_dict, loss, "b")
-            loss_dict, loss = self.vq_train(h_poses[:, :], self.hand_optimizer, self.hand_generator, loss_dict, loss, "h")
+            loss_dict, loss = self.vq_train(b_poses[:, :], self.g_body_optimizer, self.g_body, loss_dict, loss, "b")
+            loss_dict, loss = self.vq_train(h_poses[:, :], self.g_hand, self.g_hand, loss_dict, loss, "h")
         else:
-            loss_dict, loss = self.vq_train(gt_poses[:, :], self.optimizer, self.generator, loss_dict, loss, "g")
+            loss_dict, loss = self.vq_train(gt_poses[:, :], self.g_optimizer, self.g, loss_dict, loss, "g")
 
         total_loss = None
         return total_loss, loss_dict
@@ -100,46 +101,6 @@ class TrainWrapper(TrainWrapperBaseClass):
     def init_optimizer(self):
         # already setup by setup_vq_transform
         pass
-
-    def state_dict(self):
-        model_state = {
-            'generator': self.generator.state_dict(),
-            'generator_optim': self.generator_optimizer.state_dict(),
-            'audioencoder': self.audioencoder.state_dict() if self.audio else None,
-            'audioencoder_optim': self.audioencoder_optimizer.state_dict() if self.audio else None,
-            'discriminator': self.discriminator.state_dict() if self.discriminator is not None else None,
-            'discriminator_optim': self.discriminator_optimizer.state_dict() if self.discriminator is not None else None
-        }
-        return model_state
-
-    def load_state_dict(self, state_dict):
-
-        from collections import OrderedDict
-        new_state_dict = OrderedDict()  # create new OrderedDict that does not contain `module.`
-        for k, v in state_dict.items():
-            sub_dict = OrderedDict()
-            if v is not None:
-                for k1, v1 in v.items():
-                    name = k1.replace('module.', '')
-                    sub_dict[name] = v1
-            new_state_dict[k] = sub_dict
-        state_dict = new_state_dict
-        if 'generator' in state_dict:
-            self.generator.load_state_dict(state_dict['generator'])
-        else:
-            self.generator.load_state_dict(state_dict)
-
-        if 'generator_optim' in state_dict and self.generator_optimizer is not None:
-            self.generator_optimizer.load_state_dict(state_dict['generator_optim'])
-
-        if self.discriminator is not None:
-            self.discriminator.load_state_dict(state_dict['discriminator'])
-
-            if 'discriminator_optim' in state_dict and self.discriminator_optimizer is not None:
-                self.discriminator_optimizer.load_state_dict(state_dict['discriminator_optim'])
-
-        if 'audioencoder' in state_dict and self.audioencoder is not None:
-            self.audioencoder.load_state_dict(state_dict['audioencoder'])
 
     def init_params(self):
         if self.config.Data.pose.convert_to_6d:
@@ -203,3 +164,32 @@ class TrainWrapper(TrainWrapperBaseClass):
             loss_dict['f0_vel'] = f0_vel
 
         return gen_loss, loss_dict
+
+    def state_dict(self):
+        if self.composition:
+            model_state = {
+                'g_body': self.g_body.state_dict(),
+                'g_body_optim': self.g_body_optimizer.state_dict(),
+                'g_hand': self.g_hand.state_dict(),
+                'g_hand_optim': self.g_hand_optimizer.state_dict(),
+                'discriminator': self.discriminator.state_dict() if self.discriminator is not None else None,
+                'discriminator_optim': self.discriminator_optimizer.state_dict() if self.discriminator is not None else None
+            }
+        else:
+            model_state = {
+                'g': self.g.state_dict(),
+                'g_optim': self.g_optimizer.state_dict(),
+                'discriminator': self.discriminator.state_dict() if self.discriminator is not None else None,
+                'discriminator_optim': self.discriminator_optimizer.state_dict() if self.discriminator is not None else None
+            }
+        return model_state
+
+    def load_state_dict(self, state_dict):
+        if self.composition:
+            self.g_body.load_state_dict(state_dict['g_body'])
+            self.g_body_optimizer.load_state_dict(state_dict['g_body_optim'])
+            self.g_hand.load_state_dict(state_dict['g_hand'])
+            self.g_hand_optimizer.load_state_dict(state_dict['g_hand_optim'])
+        else:
+            self.g.load_state_dict(state_dict['g'])
+            self.g_optimizer.load_state_dict(state_dict['g_optim'])

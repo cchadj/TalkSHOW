@@ -287,6 +287,7 @@ class Trainer():
         wandb_run = wandb.init(
             project="gfts",
             config=self.config,
+            dir=os.getenv("WANDB_DIR", None),
         ) if self.use_wandb else None
 
         def on_step_end(global_step: int, step_losses: LossDict) -> None:

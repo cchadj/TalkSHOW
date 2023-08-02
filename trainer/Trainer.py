@@ -279,7 +279,7 @@ class Trainer():
                     self.print_func(epoch_loss_dict, epoch_steps)
 
                 if on_step_end:
-                    on_step_end(self.global_steps, loss_dict, epoch_loss_dict)
+                    on_step_end(self.global_steps, loss_dict)
             return epoch_loss_dict
 
     def train(self):
@@ -289,13 +289,15 @@ class Trainer():
             config=self.config,
         ) if self.use_wandb else None
 
-        def on_step_end(global_steps: int, step_losses: LossDict) -> None:
+        def on_step_end(global_step: int, step_losses: LossDict) -> None:
             if wandb_run is None:
                 return
 
-            wandb_run.log({
-                "step": step_losses,
-            }, step=global_steps)
+            is_logging_step = global_step % self.config.Log.print_every == 0
+            if is_logging_step:
+                wandb_run.log({
+                    "step": step_losses,
+                }, step=global_step)
 
         self.total_loss_dict = {}
         for epoch in range(self.start_epoch, self.config.Train.epochs):

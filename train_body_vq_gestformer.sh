@@ -5,4 +5,5 @@ python scripts/train.py \
 --exp_name smplx_gestformer_encoder \
 --speakers oliver seth conan chemistry \
 --config_file ./config/body_vq_gestform.json \
---device mps:0
+--device cuda:0
+

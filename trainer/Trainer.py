@@ -100,6 +100,8 @@ class Trainer():
                 config=trainer.config,
                 dir=os.getenv("WANDB_DIR", None),
             )
+            wandb_run.save(trainer.args.config_file)
+
             wandb_logger_cb = WandbLogger.create_from_config(trainer.config, wandb_run)
             model_checkpoint_cb = ModelCheckpoint.create_from_config(trainer.config, wandb_run)
             trainer.register_callback(wandb_logger_cb, model_checkpoint_cb)

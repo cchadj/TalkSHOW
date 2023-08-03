@@ -56,7 +56,7 @@
     }
   },
   "Log": {
-    "save_every": 50,
+    "save_every": 1,
     "print_every": 200,
     "name": "body-vq"
   },

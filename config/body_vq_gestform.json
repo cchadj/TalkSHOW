@@ -57,6 +57,7 @@
   },
   "Log": {
     "save_every": 1,
+    "best_model_loss_metric": "brec_loss",
     "print_every": 200,
     "name": "body-vq"
   },

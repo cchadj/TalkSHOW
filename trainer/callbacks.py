@@ -146,10 +146,8 @@ class ModelCheckpoint(TrainerCallback):
             self.best_weights = generator.state_dict()
             trainer.save_model(epoch, wandb_run=self.wandb_run, save_as_best=True)
             if self.wandb_run:
-                self.wandb_run.summary({
-                    f"best_{self.monitor}": self.best,
-                    f"best_{self.monitor}_epoch": self.best_epoch,
-                })
+                self.wandb_run.summary[f"best_{self.monitor}"] = self.best
+                self.wandb_run.summary[f"best_{self.monitor}_epoch"] = self.best_epoch
 
         is_save_epoch = (epoch+1) % self.save_frequency == 0 or (epoch+1) == 30
         if is_save_epoch:

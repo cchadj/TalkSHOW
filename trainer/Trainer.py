@@ -306,7 +306,7 @@ class Trainer():
                 if self.global_steps % self.config.Log.print_every == 0:
                     self.print_func(epoch_loss_dict, epoch_steps)
 
-                self.on_step_end(loss_dict)
+                self.on_step_end(loss_dict, self.global_steps)
 
             return epoch_loss_dict
 

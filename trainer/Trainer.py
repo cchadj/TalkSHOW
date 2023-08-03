@@ -21,7 +21,7 @@ import logging
 import time
 import shutil
 
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, Optional, List
 
 def prn_obj(obj):
     print('\n'.join(['%s:%s' % item for item in obj.__dict__.items()]))
@@ -32,9 +32,12 @@ OnStepEndCallable = Callable[[int, LossDict], None]
 
 
 class Trainer():
+    from trainer.callbacks import TrainerCallback
+
     use_wandb: bool
 
-    def __init__(self) -> None:
+    def __init__(self, callbacks: Optional[List[TrainerCallback]] = None) -> None:
+        self.callbacks = callbacks or []
         parser = parse_args()
         self.args = parser.parse_args()
         self.config = load_JsonConfig(self.args.config_file)
@@ -85,6 +88,28 @@ class Trainer():
         if self.args.resume:
             self.resume()
         # self.init_optimizer()
+
+    @classmethod
+    def create_default(cls):
+        from trainer.callbacks import WandbLogger, ModelCheckpoint
+
+        trainer = cls()
+        if trainer.use_wandb:
+            wandb_run = wandb.init(
+                project="gfts",
+                config=trainer.config,
+                dir=os.getenv("WANDB_DIR", None),
+            )
+            wandb_logger_cb = WandbLogger.create_from_config(trainer.config, wandb_run)
+            model_checkpoint_cb = ModelCheckpoint.create_from_config(trainer.config, wandb_run)
+            trainer.register_callback(wandb_logger_cb, model_checkpoint_cb)
+        else:
+            model_checkpoint_cb = ModelCheckpoint.create_from_config(trainer.config)
+            trainer.register_callback(model_checkpoint_cb)
+        return trainer
+
+    def register_callback(self, *callbacks: TrainerCallback):
+        self.callbacks.extend(callbacks)
 
     def setup_seed(self, seed):
         torch.manual_seed(seed)
@@ -213,7 +238,6 @@ class Trainer():
             self.train_set.get_dataset()
 
             self.train_loader = data.DataLoader(self.train_set.all_dataset, batch_size=self.config.DataLoader.batch_size, shuffle=True, num_workers=self.config.DataLoader.num_workers, drop_last=True)
-            
 
     def init_optimizer(self):
         pass
@@ -223,7 +247,7 @@ class Trainer():
         info_str += ['%s:%.4f'%(key, loss_dict[key]/steps) for key in list(loss_dict.keys())]
         logging.info(','.join(info_str))
     
-    def save_model(self, epoch, wandb_run: Optional[WandbRun] = None):
+    def save_model(self, epoch, wandb_run: Optional[WandbRun] = None, save_as_best=False):
         # if 'vq' in self.config.Model.model_name:
         #     state_dict = {
         #         'g_body': self.g_body.state_dict(),
@@ -237,12 +261,13 @@ class Trainer():
             'epoch': epoch,
             'global_steps': self.global_steps
         }
-        save_name = os.path.join(self.train_dir, 'ckpt-%d.pth'%(epoch))
+        name_suffix = "best" if save_as_best else epoch
+        save_name = os.path.join(self.train_dir, f'ckpt-{name_suffix}.pth')
         torch.save(state_dict, save_name)
         if wandb_run:
             wandb_run.save(save_name)
 
-    def train_epoch(self, epoch, on_step_end: Optional[OnStepEndCallable] = None) -> LossDict:
+    def train_epoch(self, epoch) -> LossDict:
         epoch_loss_dict = {} #最好是追踪每个epoch的loss变换
         epoch_steps = 0
         if 'freeMo' in self.config.Model.model_name:
@@ -260,8 +285,8 @@ class Trainer():
 
                 if self.global_steps % self.config.Log.print_every == 0:
                     self.print_func(epoch_loss_dict, epoch_steps)
-                if on_step_end:
-                    on_step_end(self.global_steps, loss_dict)
+
+                self.on_step_end(loss_dict, self.global_steps)
         else:
             # self.config.Model.model_name==smplx_S2G
             for bat in self.train_loader:
@@ -281,48 +306,29 @@ class Trainer():
                 if self.global_steps % self.config.Log.print_every == 0:
                     self.print_func(epoch_loss_dict, epoch_steps)
 
-                if on_step_end:
-                    on_step_end(self.global_steps, loss_dict)
+                self.on_step_end(loss_dict)
+
             return epoch_loss_dict
 
     def train(self):
         logging.info('start_training')
-        if self.use_wandb:
-            wandb_run = wandb.init(
-                project="gfts",
-                config=self.config,
-                dir=os.getenv("WANDB_DIR", None),
-            )
-            wandb_run.define_metric("epoch")
-            for loss_name in self.generator.loss_dict_keys:
-                wandb_run.define_metric(f"epoch_{loss_name}", goal="min", step_metric="epoch")
-        else:
-            wandb_run = None
 
-        def on_step_end(global_step: int, step_losses: LossDict) -> None:
-            if wandb_run is None:
-                return
-
-            is_logging_step = global_step % self.config.Log.print_every == 0
-            if is_logging_step:
-                wandb_run.log({
-                    "step": step_losses,
-                }, step=global_step)
-
+        self.on_train_begin()
         self.total_loss_dict = {}
         for epoch in range(self.start_epoch, self.config.Train.epochs):
             logging.info('epoch:%d'%(epoch))
-            epoch_losses = self.train_epoch(epoch, on_step_end)
-            if wandb_run:
-                epoch_losses_log = {f"epoch_{loss_name}": loss for loss_name, loss in epoch_losses.items()}
-                wandb_run.log(
-                    {
-                        **epoch_losses_log,
-                        "epoch": epoch,
-                    },
-                    step=self.global_steps
-                )
-            # self.generator.scheduler.step()
-            # logging.info('learning rate:%d' % (self.generator.scheduler.get_lr()[0]))
-            if (epoch+1)%self.config.Log.save_every == 0 or (epoch+1) == 30:
-                self.save_model(epoch, wandb_run)
+            epoch_losses = self.train_epoch(epoch)
+
+            self.on_epoch_end(epoch_losses, epoch)
+
+    def on_train_begin(self):
+        for cb in self.callbacks:
+            cb.on_train_begin(self)
+
+    def on_epoch_end(self, epoch_losses: LossDict, epoch: int):
+        for cb in self.callbacks:
+            cb.on_epoch_end(self, epoch_losses, epoch)
+
+    def on_step_end(self, step_losses: LossDict, step: int):
+        for cb in self.callbacks:
+            cb.on_step_end(self, step_losses, step)

@@ -63,7 +63,7 @@ class WandbLogger(TrainerCallback):
 
     def on_epoch_end(self, trainer: Trainer, epoch_losses: LossDict, epoch: int) -> None:
         if epoch == 0:
-            self.run.define_metric("epoch")
+            self.run.define_metric("epoch", hidden=True)
             for loss_name in epoch_losses.keys():
                 self.run.define_metric(f"epoch_{loss_name}", goal="min", step_metric="epoch")
 

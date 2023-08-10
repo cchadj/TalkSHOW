@@ -35,7 +35,7 @@
   },
   "Model": {
     "model_type": "body",
-    "model_name": "gestformer_encoder",
+    "model_name": "s2g_body_vq_gestformer",
     "composition": true,
     "code_num": 2048,
     "bh_model": true,

@@ -68,7 +68,7 @@
     "num_attention_heads": 8,
     "intermediate_size": 384,
     "quant_sequence_length": 11,
-    "sequence_length": 300,
+    "sequence_length": 88,
     "quant_factor": 3,
     "embedding_layer_type": "learnable"
   },

@@ -1,14 +1,16 @@
 import os
 import pickle
+import io
 from tqdm import tqdm
 import shutil
 import torch
 import numpy as np
 import librosa
 import random
+from pathlib import Path
 
 speakers = ['seth', 'conan', 'oliver', 'chemistry']
-data_root = "../ExpressiveWholeBodyDatasetv1.0/"
+data_root = "./data/ExpressiveWholeBodyDatasetV1.0/"
 split = 'train'
 
 
@@ -66,10 +68,18 @@ def read_pkl(data):
         return 0
 
 
+class CPU_Unpickler(pickle.Unpickler):
+    def find_class(self, module, name):
+        if module == 'torch.storage' and name == '_load_from_bytes':
+            return lambda b: torch.load(io.BytesIO(b), map_location='cpu')
+        else: return super().find_class(module, name)
+
+
 for speaker_name in speakers:
     speaker_root = os.path.join(data_root, speaker_name)
 
-    videos = [v for v in os.listdir(speaker_root)]
+    video_dir_extensions = {".mp4", ".mkv", ".webm"}
+    videos = [v for v in os.listdir(speaker_root) if Path(v).suffix in video_dir_extensions]
     print(videos)
 
     haode = huaide = 0
@@ -104,7 +114,7 @@ for speaker_name in speakers:
             # delete the data without audio or the audio file could not be read
             if os.path.isfile(audio_fname):
                 try:
-                    audio = librosa.load(audio_fname)
+                    audio = librosa.load(audio_fname, sr=None)
                 except:
                     # print(key)
                     shutil.rmtree(key)
@@ -125,7 +135,11 @@ for speaker_name in speakers:
                 huaide = huaide + 1
                 continue
 
-            data = pickle.load(f)
+            if torch.cuda.is_available():
+                data = pickle.load(f)
+            else:
+                data = CPU_Unpickler(f).load()
+
             w = read_pkl(data)
             f.close()
             quality = quality + w
@@ -143,7 +157,8 @@ for speaker_name in speakers:
 for speaker_name in speakers:
     speaker_root = os.path.join(data_root, speaker_name)
 
-    videos = [v for v in os.listdir(speaker_root)]
+    video_dir_extensions = {".mp4", ".mkv", ".webm"}
+    videos = [v for v in os.listdir(speaker_root) if Path(v).suffix in video_dir_extensions]
     print(videos)
 
     haode = huaide = 0

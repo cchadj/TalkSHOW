@@ -7,5 +7,5 @@ sys.path.append(os.getcwd())
 from trainer import Trainer
 
 if __name__ == '__main__':
-    trainer = Trainer()
+    trainer = Trainer.create_default()
     trainer.train()
